@@ -1,0 +1,16 @@
+{
+  "name": "lighthouse-mcp",
+  "version": "1.0.0",
+  "description": "MCP server wrapping Google Lighthouse for performance auditing",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "lighthouse": "^12.6.0",
+    "chrome-launcher": "^1.1.2"
+  }
+}
