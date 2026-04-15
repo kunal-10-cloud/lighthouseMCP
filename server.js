@@ -36,6 +36,13 @@ server.tool(
           "--no-sandbox",
           "--disable-gpu",
           "--disable-dev-shm-usage",
+          "--disable-software-rasterizer",
+          "--disable-extensions",
+          "--disable-background-networking",
+          "--disable-default-apps",
+          "--disable-sync",
+          "--no-first-run",
+          "--js-flags=--max-old-space-size=256",
         ],
         chromePath: process.env.CHROME_PATH || undefined,
       });
@@ -45,6 +52,13 @@ server.tool(
         output: "json",
         onlyCategories: categories,
         port: chrome.port,
+        screenEmulation: { disabled: true },
+        throttling: {
+          cpuSlowdownMultiplier: 1,
+          requestLatencyMs: 0,
+          downloadThroughputKbps: 0,
+          uploadThroughputKbps: 0,
+        },
       });
 
       const report = JSON.parse(result.report);
