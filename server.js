@@ -62,16 +62,16 @@ async function runLighthouseAudit({ url, categories, deviceType }) {
     if (isMobile) {
       lighthouseConfig.screenEmulation = {
         mobile: true,
-        width: 375,
-        height: 667,
-        deviceScaleFactor: 2,
+        width: 412,
+        height: 823,
+        deviceScaleFactor: 1.75,
         disabled: false,
       };
       lighthouseConfig.throttling = {
         cpuSlowdownMultiplier: 4,
         requestLatencyMs: 150,
-        downloadThroughputKbps: 1600,
-        uploadThroughputKbps: 750,
+        downloadThroughputKbps: 1638,
+        uploadThroughputKbps: 768,
       };
       lighthouseConfig.formFactor = "mobile";
     } else {
