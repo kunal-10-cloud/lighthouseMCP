@@ -31,4 +31,4 @@ COPY server.js ./
 
 EXPOSE 8080
 
-CMD ["node", "server.js"]
+CMD ["node", "--expose-gc", "--max-old-space-size=512", "server.js"]

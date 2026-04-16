@@ -167,6 +167,10 @@ server.tool(
           await chrome.kill();
         } catch (_) {}
       }
+      // Force garbage collection after each audit to free Chrome memory
+      if (global.gc) {
+        try { global.gc(); } catch (_) {}
+      }
     }
   }
 );
@@ -176,11 +180,43 @@ server.tool(
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const sessions = new Map();
 
+// Session TTL: auto-cleanup after 2 minutes of inactivity
+const SESSION_TTL_MS = 2 * 60 * 1000;
+
+function cleanupSession(id) {
+  const entry = sessions.get(id);
+  if (entry) {
+    if (entry.timer) clearTimeout(entry.timer);
+    try { entry.transport.close?.(); } catch (_) {}
+    sessions.delete(id);
+  }
+}
+
+function touchSession(id) {
+  const entry = sessions.get(id);
+  if (entry) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => cleanupSession(id), SESSION_TTL_MS);
+  }
+}
+
+// Sweep expired sessions (safety net — timers should handle it, but just in case)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of sessions) {
+    if (now - entry.createdAt > SESSION_TTL_MS) {
+      cleanupSession(id);
+    }
+  }
+}, 60_000);
+
 const httpServer = createServer(async (req, res) => {
-  // Health check
+  // Health check — report session count and memory for debugging
   if (req.method === "GET" && req.url === "/health") {
+    const mem = process.memoryUsage();
+    const memMB = Math.round(mem.rss / 1024 / 1024);
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", service: "lighthouse-mcp" }));
+    res.end(JSON.stringify({ status: "ok", service: "lighthouse-mcp", sessions: sessions.size, memoryMB: memMB }));
     return;
   }
 
@@ -188,9 +224,10 @@ const httpServer = createServer(async (req, res) => {
   if (req.method === "POST" && (req.url === "/mcp" || req.url === "/")) {
     const sessionId = req.headers["mcp-session-id"];
 
-    // Existing session
+    // Existing session — keep it alive
     if (sessionId && sessions.has(sessionId)) {
-      const transport = sessions.get(sessionId);
+      const { transport } = sessions.get(sessionId);
+      touchSession(sessionId);
       await transport.handleRequest(req, res);
       return;
     }
@@ -200,15 +237,16 @@ const httpServer = createServer(async (req, res) => {
       sessionIdGenerator: () =>
         `lh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       onsessioninitialized: (id) => {
-        sessions.set(id, transport);
+        const timer = setTimeout(() => cleanupSession(id), SESSION_TTL_MS);
+        sessions.set(id, { transport, timer, createdAt: Date.now() });
       },
     });
 
     transport.onclose = () => {
       const id = [...sessions.entries()].find(
-        ([, t]) => t === transport
+        ([, e]) => e.transport === transport
       )?.[0];
-      if (id) sessions.delete(id);
+      if (id) cleanupSession(id);
     };
 
     await server.connect(transport);
