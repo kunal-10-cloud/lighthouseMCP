@@ -26,8 +26,14 @@ server.tool(
       )
       .default(["performance"])
       .describe("Lighthouse categories to audit. Default: performance only."),
+    deviceType: z
+      .enum(["desktop", "mobile"])
+      .default("desktop")
+      .describe(
+        "Device profile. 'mobile' enables 375x667 screen emulation, 4G throttling, and mobile-specific diagnostics (tap-targets, viewport, font-display)."
+      ),
   },
-  async ({ url, categories }) => {
+  async ({ url, categories, deviceType }) => {
     let chrome;
     try {
       chrome = await chromeLauncher.launch({
@@ -47,19 +53,40 @@ server.tool(
         chromePath: process.env.CHROME_PATH || undefined,
       });
 
-      const result = await lighthouse(url, {
+      const isMobile = deviceType === "mobile";
+      const lighthouseConfig = {
         logLevel: "error",
         output: "json",
         onlyCategories: categories,
         port: chrome.port,
-        screenEmulation: { disabled: true },
-        throttling: {
+      };
+
+      if (isMobile) {
+        lighthouseConfig.screenEmulation = {
+          mobile: true,
+          width: 375,
+          height: 667,
+          deviceScaleFactor: 2,
+          disabled: false,
+        };
+        lighthouseConfig.throttling = {
+          cpuSlowdownMultiplier: 4,
+          requestLatencyMs: 150,
+          downloadThroughputKbps: 1600,
+          uploadThroughputKbps: 750,
+        };
+        lighthouseConfig.formFactor = "mobile";
+      } else {
+        lighthouseConfig.screenEmulation = { disabled: true };
+        lighthouseConfig.throttling = {
           cpuSlowdownMultiplier: 1,
           requestLatencyMs: 0,
           downloadThroughputKbps: 0,
           uploadThroughputKbps: 0,
-        },
-      });
+        };
+      }
+
+      const result = await lighthouse(url, lighthouseConfig);
 
       const report = JSON.parse(result.report);
 
@@ -118,6 +145,9 @@ server.tool(
         "unused-javascript",
         "unused-css-rules",
       ];
+      if (isMobile) {
+        diagnosticIds.push("tap-targets", "viewport", "font-display");
+      }
       const diagnostics = [];
       for (const id of diagnosticIds) {
         const audit = report.audits?.[id];
@@ -138,6 +168,7 @@ server.tool(
             text: JSON.stringify(
               {
                 url,
+                deviceType,
                 scores,
                 metrics,
                 opportunities: opportunities.slice(0, 10),
