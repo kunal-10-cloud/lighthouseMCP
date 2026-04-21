@@ -33,6 +33,8 @@ const TOOL_SCHEMA = {
 
 async function runLighthouseAudit({ url, categories, deviceType }) {
   let chrome;
+  let result;
+  let report;
   try {
     chrome = await chromeLauncher.launch({
       chromeFlags: [
@@ -84,8 +86,8 @@ async function runLighthouseAudit({ url, categories, deviceType }) {
       };
     }
 
-    const result = await lighthouse(url, lighthouseConfig);
-    const report = JSON.parse(result.report);
+    result = await lighthouse(url, lighthouseConfig);
+    report = JSON.parse(result.report);
 
     const scores = {};
     for (const [key, cat] of Object.entries(report.categories || {})) {
@@ -190,13 +192,24 @@ async function runLighthouseAudit({ url, categories, deviceType }) {
       isError: true,
     };
   } finally {
+    // Explicitly null large objects so GC can reclaim them
+    result = undefined;
+    report = undefined;
+
     if (chrome) {
       try {
         await chrome.kill();
+        // Wait for subprocess to actually exit
+        await new Promise((r) => setTimeout(r, 100));
       } catch (_) {}
     }
+
+    // Double GC pass — first collects, second compacts
     if (global.gc) {
-      try { global.gc(); } catch (_) {}
+      try {
+        global.gc(true);
+        global.gc(true);
+      } catch (_) {}
     }
   }
 }
